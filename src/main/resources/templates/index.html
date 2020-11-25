@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en"
+      xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>Bootstrap 实例 - 基本的表格</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://cdn.staticfile.org/jquery/2.1.1/jquery.min.js"></script>
+    <script src="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</head>
+<body>
+    <input type="hidden" th:value="${name}" id="uname"/>
+    <div style="width: 100%">
+        <div style="height: 500px;border: solid 1px black;width: 20%;float: left">
+            <ul id="people">
+
+            </ul>
+        </div>
+        <div style="height: 500px;border: solid 1px black;width: 80%;float: left" id="msginfo">
+            <!--<div style="text-align: left;background: cadetblue">-->
+                <!--<p><span>张三</span>【2020-11-11 11:11:11】</p>-->
+                <!--<p>我爱心；；ad</p>-->
+            <!--</div>-->
+            <!--<div style="text-align: right;background: chartreuse">-->
+                <!--<p><span>张三</span>【2020-11-11 11:11:11】</p>-->
+                <!--<p>我爱心；；ad</p>-->
+            <!--</div>-->
+            <!--<div style="text-align: left;background: cadetblue">-->
+                <!--<p><span>张三</span>【2020-11-11 11:11:11】</p>-->
+                <!--<p>我爱心；；ad</p>-->
+            <!--</div>-->
+        </div>
+    </div>
+    <input type="text" name="msg" id="msg">
+    <input type="button" value="提交" id="btn">
+
+</body>
+<script>
+    var websocket=null;
+    if ('WebSocket' in window){
+        var username=document.getElementById("uname").value;
+        var myparam=encodeURIComponent(encodeURIComponent(JSON.stringify(username)));
+        websocket=new WebSocket("ws://localhost:8080/websocket/"+myparam);
+    }else{
+        alert("没有消息")
+    }
+
+    websocket.onopen=function (event) {
+        console.log("建立连接")
+    }
+    websocket.onclose=function (event) {
+        console.log("连接关闭")
+    }
+    websocket.onmessage=function (event) {
+        console.log("收到消息"+event.data);
+        var json=eval("("+event.data+")");
+        if(json.type===-1){
+            for (var i=0;i<json.onlineUsers.length;i++){
+                var t=eval("("+json.onlineUsers[i]+")");
+                console.log(t);
+                t.uname=t.uname.replace("\"","").replace("\"","");
+                $("#people").append(getPeopleAddHtml(t));
+            }
+        }
+        if (json.type === 1){
+            json.uname=json.uname.replace("\"","").replace("\"","");
+            console.log(json.uname+"进入了");
+            $("#people").append(getPeopleAddHtml(json));
+        }else if(json.type===0){
+            json.uname=json.uname.replace("\"","").replace("\"","");
+            console.log(json.uname+"离开了")
+            $('#'+json.uname).remove();
+        }else if(json.type==2){
+            //群发消息
+            //判断是否为自己 是自己就不接受群发的消息
+            if (json.uname!=username){
+                $("#msginfo").append("<div style=\"text-align: left;background: cadetblue\">\n" +
+                    "                <p><span>"+json.uname+"</span>【"+json.time+"】</p>\n" +
+                    "                <p>"+json.content+"</p>\n" +
+                    "            </div>")
+            }
+        }else if(json.type===3){
+            json.tousername=json.tousername.replace("\"","").replace("\"","");
+            json.fromusername=json.fromusername.replace("\"","").replace("\"","");
+            $("#msginfo").append("<div style=\"text-align: left;background: green\">\n" +
+                "                <p><span>"+json.tousername+"收到了"+json.fromusername+"的悄悄话</span>【"+json.time+"】</p>\n" +
+                "                <p>"+json.content+"</p>\n" +
+                "            </div>");
+        }
+    }
+    websocket.onerror=function (event) {
+        console.log("异常了");
+    }
+
+    window.onbeforeunload=function () {
+        websocket.close();
+    }
+
+    //发送消息
+    $("#btn").click(function () {
+        var msg=$("#msg").val();
+        if (msg==''||msg==null){
+            alert("不能为空");
+            return;
+        }
+
+        var time=new Date();
+
+        var miao=time.getSeconds();
+        if (miao<=9){
+            miao="0"+miao;
+        }
+        var timestr=time.getFullYear()+"-"+(time.getMonth()+1)+"-"+time.getDate()+" "+time.getHours()+":"+time.getMinutes()+":"+miao;
+        //群发
+        var json={
+            type:2,
+            flag:1,
+            uname:username,
+            content:msg,
+            time:timestr
+        }
+
+        $("#msginfo").append("<div style=\"text-align: right;background: chartreuse\">\n" +
+            "                <p><span>"+username+"</span>【"+timestr+"】</p>\n" +
+            "                <p>"+msg+"</p>\n" +
+            "            </div>");
+        $("#msg").val("");
+
+
+        websocket.send(JSON.stringify(json));
+    })
+
+
+    $(document).on("click","body .talk",function () {
+        var msg=$("#msg").val();
+        if (msg==''||msg==null){
+            alert("不能为空");
+            return;
+        }
+        var id=$(this).parent().attr("id");
+
+        var time=new Date();
+
+        var miao=time.getSeconds();
+        if (miao<=9){
+            miao="0"+miao;
+        }
+        var timestr=time.getFullYear()+"-"+(time.getMonth()+1)+"-"+time.getDate()+" "+time.getHours()+":"+time.getMinutes()+":"+miao;
+
+        //私发送消息
+        var json={
+            type:3,
+            flag:2,
+            tousername:id,
+            fromusername:username,
+            content:msg,
+            time:timestr
+        }
+
+
+
+        $("#msginfo").append("<div style=\"text-align: right;background: green\">\n" +
+            "                <p><span>"+username+"发送了悄悄话给"+id+"</span>【"+timestr+"】</p>\n" +
+            "                <p>"+msg+"</p>\n" +
+            "            </div>");
+        $("#msg").val("");
+
+        //发送消息给私发的人
+        websocket.send(JSON.stringify(json));
+    })
+
+    function getPeopleAddHtml(json) {
+        if (json.uname==username){
+            var html="<li id='"+json.uname+"' style='color: chartreuse'>"+json.uname+"" +
+                "&nbsp;&nbsp;&nbsp;&nbsp;<button class='talk'>私聊</button>" +
+                "</li>";
+            return html;
+        }else{
+            var html="<li id='"+json.uname+"'>"+json.uname+"" +
+                "&nbsp;&nbsp;&nbsp;&nbsp;<button class='talk'>私聊</button>" +
+                "</li>";
+            return html;
+        }
+    }
+</script>
+</html>
